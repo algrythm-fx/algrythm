@@ -1,0 +1,11 @@
+MetaTrader5
+pandas
+numpy
+scikit-learn
+xgboost
+matplotlib
+python-dotenv
+deap
+requests
+streamlit
+plotly
