@@ -99,6 +99,7 @@ with tab3:
     st.subheader("Performance Breakdown")
     col1, col2 = st.columns(2)
     pnl_chart_placeholder = col1.empty()
+    # Define the placeholder for the pie chart
     win_loss_pie_placeholder = col2.empty()
 
 
