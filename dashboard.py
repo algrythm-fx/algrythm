@@ -15,6 +15,11 @@ def init_firebase():
         # Convert the secrets dict to a credentials object
         cred_dict = dict(st.secrets.firebase_credentials)
         cred = credentials.Certificate(cred_dict)
+
+        #conversion
+        private_key_with_escapes = cred_dict.get("private_key")
+        correct_private_key = private_key_with_escapes.replace('\\n', '\n')
+        cred_dict["private_key"] = correct_private_key
         
         # Check if the app is already initialized to avoid errors on rerun
         if not firebase_admin._apps:
