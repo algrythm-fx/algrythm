@@ -124,4 +124,3 @@ with tab3:
 last_updated.write(f"Last updated: {data['last_updated']}")
 
 time.sleep(2)
-st.experimental_rerun()
