@@ -9,3 +9,4 @@ deap
 requests
 streamlit
 plotly
+firebase_admin
