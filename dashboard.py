@@ -126,7 +126,7 @@ while True:
 
     signal_placeholder.metric("Last Signal", bot_status.get('last_signal', 'N/A'))
     confidence_placeholder.metric("Signal Confidence", bot_status.get('last_confidence', 'N/A'))
-    trend_placeholder.metric("H1 Trend", bot_status.get('higher_tf_trend', 'N/A').upper())
+    trend_placeholder.metric("M15 Trend", bot_status.get('higher_tf_trend', 'N/A').upper())
 
     with positions_placeholder.container():
         if open_positions:
