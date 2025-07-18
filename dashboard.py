@@ -1,36 +1,58 @@
 import streamlit as st
 import pandas as pd
-import json
 import time
 from datetime import datetime
 import plotly.graph_objects as go
+import firebase_admin
+from firebase_admin import credentials, db
 
 # --- Page Configuration ---
-st.set_page_config(
-    page_title="Algrythm FX AI Trading Bot",
-    page_icon="🤖",
-    layout="wide",
-)
+st.set_page_config(page_title="Algrythm AI Trading Bot", page_icon="🤖", layout="wide")
 
-# --- Helper Function ---
-def load_data():
-    """Loads the dashboard data from the JSON file."""
+# --- Firebase Initialization (using Streamlit Secrets) ---
+def init_firebase():
     try:
-        with open('dashboard_data.json', 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {
-            'last_updated': 'N/A', 'account_info': {}, 'open_positions': [],
-            'bot_status': {}, 'log_messages': [], 'trade_history': []
-        }
+        # Convert the secrets dict to a credentials object
+        cred_dict = dict(st.secrets.firebase_credentials)
+        cred = credentials.Certificate(cred_dict)
+        
+        # Check if the app is already initialized to avoid errors on rerun
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': f"https://{cred_dict['project_id']}-default-rtdb.firebaseio.com/"
+            })
+    except Exception as e:
+        st.error(f"Firebase initialization failed: {e}. Please check your Streamlit Secrets.")
+        st.stop()
 
-# --- Main Dashboard Title ---
-st.title("🤖 Algrythm FX Trading Bot Dashboard")
+# --- Helper Function to Load Data from Firebase ---
+@st.cache_data(ttl=5) # Cache data for 5 seconds to avoid hitting Firebase too often
+def load_data_from_firebase():
+    """Loads the dashboard data from the Firebase Realtime Database."""
+    try:
+        ref = db.reference('/')
+        data = ref.get()
+        if data is None: # If database is empty
+            return {
+                'last_updated': 'N/A', 'account_info': {}, 'open_positions': [],
+                'bot_status': {}, 'log_messages': [], 'trade_history': []
+            }
+        return data
+    except Exception as e:
+        st.warning(f"Could not fetch data from Firebase: {e}")
+        return {} # Return empty dict on error
+
+# Initialize Firebase connection
+init_firebase()
+
+# --- The rest of the UI code is the same as before ---
+st.title("🤖 Algrythm FX AI Trading Bot Dashboard")
 last_updated_placeholder = st.empty()
-
-# --- Define Tabs ---
 tab1, tab2, tab3 = st.tabs(["📊 Live Status", "📖 Trade History", "📈 Performance Analytics"])
+# ... (The entire UI layout code from the previous step goes here)
+# ... I am omitting it for brevity, but you should paste your full UI code below this line.
 
+# For completeness, here is the UI layout part again.
 # --- Tab 1: Live Status Content ---
 with tab1:
     st.subheader("Account Status")
@@ -74,17 +96,24 @@ with tab3:
     pnl_chart_placeholder = col1.empty()
     win_loss_pie_placeholder = col2.empty()
 
+
 # --- Main Application Loop ---
 while True:
-    data = load_data()
+    data = load_data_from_firebase() # Use the new function
+    
+    # Extract data with .get() to avoid errors if a key is missing
     acc_info = data.get('account_info', {})
     bot_status = data.get('bot_status', {})
     open_positions = data.get('open_positions', [])
     log_messages = data.get('log_messages', [])
     trade_history = data.get('trade_history', [])
 
-    # --- Update Placeholders in Tab 1 ---
+    # Update placeholders in Tab 1
     last_updated_placeholder.write(f"**Last Updated:** {data.get('last_updated', 'N/A')}")
+    # ... (the rest of the UI update logic is exactly the same)
+    # ... I am omitting it for brevity. Paste your full update logic here.
+    
+    # For completeness, here is the update logic part again
     balance_placeholder.metric("Balance", f"${acc_info.get('balance', 0):,.2f}")
     equity_placeholder.metric("Equity", f"${acc_info.get('equity', 0):,.2f}")
     profit_placeholder.metric("Live P/L", f"${acc_info.get('profit', 0):,.2f}")
@@ -104,17 +133,13 @@ while True:
     with log_placeholder.container():
         st.code("\n".join(log_messages), language=None)
 
-    # --- Update Placeholders in Tab 2 & 3 ---
     if trade_history:
         df_history = pd.DataFrame(trade_history)
         df_history['time'] = pd.to_datetime(df_history['time'])
 
-        # Update Tab 2
         with history_placeholder.container():
             st.dataframe(df_history, use_container_width=True)
 
-        # Update Tab 3
-        # Calculate Metrics
         total_profit = df_history['profit'].sum()
         wins = df_history[df_history['profit'] > 0]
         losses = df_history[df_history['profit'] <= 0]
@@ -129,18 +154,15 @@ while True:
         win_rate_placeholder.metric("Win Rate", f"{win_rate:.2f}%")
         profit_factor_placeholder.metric("Profit Factor", f"{profit_factor:.2f}")
 
-        # Equity Curve
         initial_balance = acc_info.get('balance', 10000) - total_profit
         df_history['equity'] = initial_balance + df_history['profit'].cumsum()
         with equity_curve_placeholder.container():
             st.line_chart(df_history.rename(columns={'time':'index'}).set_index('index')['equity'])
 
-        # PnL Bar Chart
         with pnl_chart_placeholder.container():
             st.bar_chart(df_history['profit'], use_container_width=True)
             st.caption("Profit/Loss per Trade")
 
-        # Win/Loss Pie Chart
         with win_loss_pie_placeholder.container():
             fig = go.Figure(data=[go.Pie(labels=['Wins', 'Losses'], values=[len(wins), len(losses)],
                                          marker_colors=['#2ca02c', '#d62728'])])
@@ -148,9 +170,9 @@ while True:
             st.plotly_chart(fig, use_container_width=True)
     else:
         with history_placeholder.container(): st.info("No completed trades have been logged yet.")
-        with equity_curve_placeholder.container(): st.info("No data for equity curve.")
-        with pnl_chart_placeholder.container(): st.info("No data for PnL chart.")
-        with win_loss_pie_placeholder.container(): st.info("No data for win/loss breakdown.")
+        with equity_curve_placeholder.container(): st.info("Awaiting trade history to plot equity curve.")
+        with pnl_chart_placeholder.container(): st.info("Awaiting trade history.")
+        with win_loss_pie_placeholder.container(): st.info("Awaiting trade history.")
 
     # Refresh interval
     time.sleep(5)
