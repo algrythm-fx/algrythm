@@ -174,7 +174,7 @@ while True:
                                          marker_colors=['#2ca02c', '#d62728'])])
             fig.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=300)
             win_loss_pie_placeholder.plotly_chart(fig, use_container_width=True)
-            st.plotly_chart(fig, use_container_width=True)
+            #st.plotly_chart(fig, use_container_width=True)
     else:
         with history_placeholder.container(): st.info("No completed trades have been logged yet.")
         with equity_curve_placeholder.container(): st.info("Awaiting trade history to plot equity curve.")
