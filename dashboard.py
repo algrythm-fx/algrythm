@@ -28,7 +28,7 @@ def init_firebase():
 init_firebase()
 
 # --- Data Loading with Caching ---
-@st.cache_data(ttl=2)  # Refresh every 5 seconds
+@st.cache_data(ttl=1)  # Refresh every 5 seconds
 def load_firebase_data():
     try:
         ref = db.reference('/')
@@ -119,8 +119,11 @@ with tab3:
             st.plotly_chart(fig, use_container_width=True, key="performance_pie")
     else:
         st.info("No performance data available")
-
+if st.button("Refresh Now"):
+        st.cache_data.clear()
+        st.rerun()
+    
 # Update last updated time
 last_updated.write(f"Last updated: {data['last_updated']}")
 
-time.sleep(2)
+time.sleep(1)
