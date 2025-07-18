@@ -180,4 +180,4 @@ while True:
         with win_loss_pie_placeholder.container(): st.info("Awaiting trade history.")
 
     # Refresh interval
-    time.sleep(5)
+    time.sleep(2)
