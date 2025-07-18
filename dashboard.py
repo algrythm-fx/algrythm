@@ -28,7 +28,7 @@ def init_firebase():
 init_firebase()
 
 # --- Data Loading with Caching ---
-@st.cache_data(ttl=5)  # Refresh every 5 seconds
+@st.cache_data(ttl=2)  # Refresh every 5 seconds
 def load_firebase_data():
     try:
         ref = db.reference('/')
@@ -122,3 +122,6 @@ with tab3:
 
 # Update last updated time
 last_updated.write(f"Last updated: {data['last_updated']}")
+
+time.sleep(2)
+st.experimental_rerun()
