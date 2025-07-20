@@ -159,36 +159,63 @@ def calculate_metrics(df, initial_balance):
 
 
 def render_performance_analytics_tab(data):
-    """Render the Performance Analytics tab"""
+    """Render the Performance Analytics tab with robust error handling"""
     st.subheader("Performance Analytics")
+    
+    # Initialize default metrics
+    metrics = {
+        'total_trades': 0,
+        'net_profit': 0,
+        'profit_factor': 0,
+        'max_drawdown': 0,
+        'sharpe_ratio': 0,
+        'win_rate': 0,
+        'avg_win': 0,
+        'avg_loss': 0
+    }
     
     trades = data.get('trade_history', [])
     if not trades:
         st.info("No performance data available")
-        return
+        return metrics  # Return default metrics
     
     try:
         df = pd.DataFrame(trades)
         
-        # Handle datetime conversion
+        # Handle datetime conversion safely
         if 'time' in df.columns:
-            df['time'] = pd.to_datetime(df['time'], errors='coerce')
-            df = df.dropna(subset=['time']).sort_values('time')
+            with st.spinner('Processing time data...'):
+                df['time'] = pd.to_datetime(df['time'], errors='coerce')
+                df = df.dropna(subset=['time']).sort_values('time')
         
-        # Calculate metrics
-        account_balance = data.get('account_info', {}).get('balance', DEFAULT_BALANCE)
-        net_profit = df['profit'].sum() if 'profit' in df.columns else 0
-        initial_balance = account_balance - net_profit
-        profit_factor = metrics['profit_factor']
-        pf_display = "∞" if profit_factor == float('inf') else f"{profit_factor:.2f}"
-        metrics = calculate_metrics(df, initial_balance)
-        
-        # Display KPIs
+        # Calculate metrics only if we have valid data
+        if len(df) > 0:
+            account_balance = data.get('account_info', {}).get('balance', DEFAULT_BALANCE)
+            
+            # Calculate profit if not present
+            if 'profit' not in df.columns:
+                if all(col in df.columns for col in ['exit_price', 'entry_price']):
+                    df['profit'] = df['exit_price'] - df['entry_price']
+            
+            if 'profit' in df.columns:
+                metrics = calculate_metrics(df, account_balance - df['profit'].sum())
+    
+    except Exception as e:
+        st.error(f"Error processing trade data: {str(e)}")
+        if st.checkbox("Show debug info"):
+            st.write("Problematic trade data:", trades)
+        return metrics  # Return whatever metrics we have
+    
+    # Display section - now metrics is guaranteed to exist
+    try:
         st.subheader("Key Performance Indicators")
         cols = st.columns(4)
-        cols[0].metric("Net Profit", f"${metrics['net_profit']:,.2f}", 
-                      delta=f"{metrics['net_profit']/initial_balance*100:.1f}%")
-        cols[1].metric("Profit Factor", pf_display)
+        
+        # Handle profit factor display
+        pf_value = "∞" if metrics['profit_factor'] == float('inf') else f"{metrics['profit_factor']:.2f}"
+        
+        cols[0].metric("Net Profit", f"${metrics['net_profit']:,.2f}")
+        cols[1].metric("Profit Factor", pf_value)
         cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}")
         cols[3].metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
         
@@ -198,29 +225,31 @@ def render_performance_analytics_tab(data):
         cols[2].metric("Avg Win", f"${metrics['avg_win']:,.2f}")
         cols[3].metric("Avg Loss", f"${metrics['avg_loss']:,.2f}")
         
-        # Charts
-        st.subheader("Equity Curve")
-        st.line_chart(df.set_index('time')['equity'])
-        
-        st.subheader("Trade Distribution")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.bar_chart(df.set_index('time')['profit'], 
-                        color=COLOR_LOSS if metrics['net_profit'] < 0 else COLOR_WIN)
-        
-        with col2:
-            fig = go.Figure(go.Pie(
-                labels=['Wins', 'Losses'],
-                values=[metrics['total_trades'] - len(df[df['profit'] <= 0]), len(df[df['profit'] <= 0])],
-                marker_colors=[COLOR_WIN, COLOR_LOSS],
-                hole=0.3
-            ))
-            st.plotly_chart(fig, use_container_width=True)
+        # Only show charts if we have time-based data
+        if 'time' in df.columns and len(df) > 0:
+            st.subheader("Equity Curve")
+            st.line_chart(df.set_index('time')['equity'])
             
+            st.subheader("Trade Distribution")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.bar_chart(df.set_index('time')['profit'], 
+                            color=COLOR_LOSS if metrics['net_profit'] < 0 else COLOR_WIN)
+            
+            with col2:
+                fig = go.Figure(go.Pie(
+                    labels=['Wins', 'Losses'],
+                    values=[metrics['total_trades'] - len(df[df['profit'] <= 0]), 
+                           len(df[df['profit'] <= 0])],
+                    marker_colors=[COLOR_WIN, COLOR_LOSS],
+                    hole=0.3
+                ))
+                st.plotly_chart(fig, use_container_width=True)
+    
     except Exception as e:
-        st.error(f"Error rendering analytics: {str(e)}")
-        if st.checkbox("Show debug info"):
-            st.write("Raw trade data:", trades)
+        st.error(f"Error displaying analytics: {str(e)}")
+    
+    return metrics
 
 # --- Main App ---
 def main():
