@@ -127,3 +127,4 @@ if st.button("Refresh Now"):
 last_updated.write(f"Last updated: {data['last_updated']}")
 
 time.sleep(1)
+st.rerun()
