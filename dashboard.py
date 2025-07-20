@@ -161,6 +161,7 @@ def calculate_metrics(df, initial_balance):
 def render_performance_analytics_tab(data):
     """Render the Performance Analytics tab with robust error handling"""
     st.subheader("Performance Analytics")
+    account_info = data.get('account_info', {})
     
     # Initialize default metrics
     metrics = {
