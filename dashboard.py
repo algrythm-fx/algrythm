@@ -148,7 +148,6 @@ def calculate_metrics(df, initial_balance):
     df['equity'] = initial_balance + df['profit'].cumsum()
     df['peak'] = df['equity'].cummax()
     df['drawdown'] = (df['peak'] - df['equity'])
-    max_drawdown = df['drawdown'].max()
     metrics['max_drawdown'] = df['drawdown'].max()
     
     # Sharpe Ratio
@@ -225,7 +224,7 @@ def render_performance_analytics_tab(data):
                           delta=f"{metrics['net_profit']/initial_balance*100:.1f}%" if initial_balance else None)
         cols[1].metric("Profit Factor", pf_value)
         cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}",
-                      delta=f"-{max_drawdown/initial_balance*100:.1f}%" if initial_balance else None)
+                      delta=f"-{metrics['max_drawdown']/initial_balance*100:.1f}%" if initial_balance else None)
         cols[3].metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
         
         cols = st.columns(4)
