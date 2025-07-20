@@ -19,17 +19,17 @@ st.set_page_config(
 # --- Firebase Initialization (Robust and cached) ---
 @st.cache_resource
 def init_firebase():
-    """Initializes the Firebase connection using Streamlit secrets."""
     try:
-        cred_dict = st.secrets.firebase_credentials
-        # Fix private key formatting which Streamlit secrets can alter
-        cred_dict["private_key"] = cred_dict["private_key"].replace('\\n', '\n')
-        cred = credentials.Certificate(cred_dict)
-        firebase_admin.initialize_app(cred, {
-            'databaseURL': f"https://{cred_dict['project_id']}-default-rtdb.firebaseio.com/"
-        })
+        if not firebase_admin._apps:
+            cred_dict = dict(st.secrets.firebase_credentials)
+            # Fix private key formatting
+            cred_dict["private_key"] = cred_dict["private_key"].replace('\\n', '\n')
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': f"https://{cred_dict['project_id']}-default-rtdb.firebaseio.com/"
+            })
     except Exception as e:
-        st.error(f"Firebase initialization failed: {e}. Check your Streamlit Secrets.")
+        st.error(f"Firebase initialization failed: {e}")
         st.stop()
 
 # --- Data Loading (More reasonable cache time) ---
