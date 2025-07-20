@@ -88,30 +88,65 @@ def render_trade_history_tab(data):
     else:
         st.info("No trade history has been logged yet.")
 
-def calculate_key_metrics(trade_history):
+def calculate_key_metrics(trade_history, initial_balance=10000):
     """Calculate advanced performance metrics"""
     if not trade_history:
-        return {}
+        return {
+            'net_profit': 0,
+            'profit_factor': 0,
+            'max_drawdown': 0,
+            'sharpe_ratio': 0,
+            'total_trades': 0,
+            'win_rate': 0,
+            'avg_win': 0,
+            'avg_loss': 0
+        }
     
     df = pd.DataFrame(trade_history)
-    df['profit'] = df['exit_price'] - df['entry_price']  # Simplified for example
+    
+    # Ensure we have required columns
+    if 'profit' not in df.columns:
+        if 'exit_price' in df.columns and 'entry_price' in df.columns:
+            df['profit'] = df['exit_price'] - df['entry_price']
+        else:
+            return {
+                'net_profit': 0,
+                'profit_factor': 0,
+                'max_drawdown': 0,
+                'sharpe_ratio': 0,
+                'total_trades': 0,
+                'win_rate': 0,
+                'avg_win': 0,
+                'avg_loss': 0
+            }
     
     # Basic metrics
-    win_rate = len(df[df['profit'] > 0]) / len(df)
-    avg_win = df[df['profit'] > 0]['profit'].mean()
-    avg_loss = abs(df[df['profit'] <= 0]['profit'].mean())
+    total_trades = len(df)
+    wins = len(df[df['profit'] > 0])
+    losses = total_trades - wins
+    win_rate = wins / total_trades * 100 if total_trades > 0 else 0
+    avg_win = df[df['profit'] > 0]['profit'].mean() if wins > 0 else 0
+    avg_loss = abs(df[df['profit'] <= 0]['profit'].mean()) if losses > 0 else 0
     profit_factor = avg_win / avg_loss if avg_loss > 0 else float('inf')
+    net_profit = df['profit'].sum()
     
     # Advanced metrics
-    df['equity'] = df['profit'].cumsum()
-    max_drawdown = (df['equity'].cummax() - df['equity']).max()
-    sharpe_ratio = df['profit'].mean() / df['profit'].std() * np.sqrt(252)  # Annualized
+    df['equity'] = initial_balance + df['profit'].cumsum()
+    df['peak'] = df['equity'].cummax()
+    df['drawdown'] = df['peak'] - df['equity']
+    max_drawdown = df['drawdown'].max()
+    
+    # Calculate Sharpe Ratio (annualized)
+    returns = df['profit'] / initial_balance
+    sharpe_ratio = returns.mean() / returns.std() * np.sqrt(252) if len(returns) > 1 and returns.std() > 0 else 0
     
     return {
-        'win_rate': win_rate,
+        'net_profit': net_profit,
         'profit_factor': profit_factor,
         'max_drawdown': max_drawdown,
         'sharpe_ratio': sharpe_ratio,
+        'total_trades': total_trades,
+        'win_rate': win_rate,
         'avg_win': avg_win,
         'avg_loss': avg_loss
     }
@@ -124,54 +159,76 @@ def render_performance_analytics_tab(data):
     st.subheader("Performance Analytics")
     
     if trade_history:
-        # --- 1. Calculate the advanced metrics ---
-        # Use the current balance to infer the initial balance for a more accurate equity curve
+        # Calculate initial balance from current balance and net profit
         current_balance = account_info.get('balance', 10000)
-        net_profit_from_history = pd.DataFrame(trade_history)['profit'].sum()
-        initial_balance = current_balance - net_profit_from_history
+        df_history = pd.DataFrame(trade_history)
         
+        # Calculate net profit from history if possible
+        if 'profit' in df_history.columns:
+            net_profit_from_history = df_history['profit'].sum()
+        elif 'exit_price' in df_history.columns and 'entry_price' in df_history.columns:
+            net_profit_from_history = (df_history['exit_price'] - df_history['entry_price']).sum()
+        else:
+            net_profit_from_history = 0
+            
+        initial_balance = current_balance - net_profit_from_history
+
         metrics = calculate_key_metrics(trade_history, initial_balance)
 
-        # --- 2. Display Key Performance Indicators (KPIs) ---
+        # --- Display Key Performance Indicators (KPIs) ---
         st.subheader("Key Performance Indicators")
         cols = st.columns(4)
-        cols[0].metric("Net Profit", f"${metrics.get('net_profit', 0):,.2f}")
-        cols[1].metric("Profit Factor", f"{metrics.get('profit_factor', 0):.2f}")
-        cols[2].metric("Max Drawdown", f"${metrics.get('max_drawdown', 0):,.2f}")
-        cols[3].metric("Sharpe Ratio", f"{metrics.get('sharpe_ratio', 0):.2f}")
+        cols[0].metric("Net Profit", f"${metrics['net_profit']:,.2f}", 
+                      delta=f"{metrics['net_profit']/initial_balance*100:.1f}%" if initial_balance else None)
+        cols[1].metric("Profit Factor", f"{metrics['profit_factor']:.2f}")
+        cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}", 
+                      delta=f"-{metrics['max_drawdown']/initial_balance*100:.1f}%" if initial_balance else None)
+        cols[3].metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
         
         cols2 = st.columns(4)
-        cols2[0].metric("Total Trades", f"{metrics.get('total_trades', 0)}")
-        cols2[1].metric("Win Rate", f"{metrics.get('win_rate', 0):.1f}%")
-        cols2[2].metric("Average Win", f"${metrics.get('avg_win', 0):,.2f}")
-        cols2[3].metric("Average Loss", f"${metrics.get('avg_loss', 0):,.2f}")
+        cols2[0].metric("Total Trades", metrics['total_trades'])
+        cols2[1].metric("Win Rate", f"{metrics['win_rate']:.1f}%")
+        cols2[2].metric("Avg Win", f"${metrics['avg_win']:,.2f}")
+        cols2[3].metric("Avg Loss", f"${metrics['avg_loss']:,.2f}")
 
-        # --- 3. Display Charts ---
+        # --- Display Charts ---
         df = pd.DataFrame(trade_history)
-        df['time'] = pd.to_datetime(df['time'])
-        df = df.sort_values('time')
-
+        if 'time' in df.columns:
+            df['time'] = pd.to_datetime(df['time'])
+            df = df.sort_values('time')
+        else:
+            df['time'] = pd.to_datetime(df.index)
+        
         st.subheader("Equity Curve")
-        df['equity'] = initial_balance + df['profit'].cumsum()
+        df['equity'] = initial_balance + df['profit'].cumsum() if 'profit' in df.columns else initial_balance
         st.line_chart(df.rename(columns={'time':'index'}).set_index('index')['equity'])
 
         st.subheader("Trade Distribution")
         chart_col1, chart_col2 = st.columns(2)
         with chart_col1:
-            st.bar_chart(df.set_index('time')['profit'], color="#FF4B4B" if metrics.get('net_profit', 0) < 0 else "#2ca02c")
-            st.caption("Profit/Loss per Trade")
+            if 'profit' in df.columns:
+                st.bar_chart(df.set_index('time')['profit'], 
+                            color="#FF4B4B" if metrics['net_profit'] < 0 else "#2ca02c")
+                st.caption("Profit/Loss per Trade")
+            else:
+                st.warning("Profit data not available for chart")
+        
         with chart_col2:
-            fig = go.Figure(go.Pie(
-                labels=['Wins', 'Losses'],
-                values=[len(df[df['profit']>0]), len(df[df['profit']<=0])],
-                marker_colors=['#2ca02c', '#d62728'],
-                hole=.3
-            ))
-            fig.update_layout(title_text='Win/Loss Distribution', margin=dict(l=20, r=20, t=40, b=20), height=300)
-            st.plotly_chart(fig, use_container_width=True)
+            if 'profit' in df.columns:
+                fig = go.Figure(go.Pie(
+                    labels=['Wins', 'Losses'],
+                    values=[len(df[df['profit']>0]), len(df[df['profit']<=0])],
+                    marker_colors=['#2ca02c', '#d62728'],
+                    hole=.3
+                ))
+                fig.update_layout(title_text='Win/Loss Distribution', 
+                                margin=dict(l=20, r=20, t=40, b=20), 
+                                height=300)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Profit data not available for pie chart")
     else:
         st.info("No performance data available. Waiting for the first closed trade to be logged.")
-
 # --- Main App Execution ---
 
 # Initialize Firebase connection
