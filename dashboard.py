@@ -148,6 +148,7 @@ def calculate_metrics(df, initial_balance):
     df['equity'] = initial_balance + df['profit'].cumsum()
     df['peak'] = df['equity'].cummax()
     df['drawdown'] = (df['peak'] - df['equity'])
+    max_drawdown = df['drawdown'].max()
     metrics['max_drawdown'] = df['drawdown'].max()
     
     # Sharpe Ratio
