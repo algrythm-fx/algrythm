@@ -108,7 +108,7 @@ def render_live_status_tab(data):
     display_bot_status(data.get('bot_status', {}))
     display_positions(data.get('open_positions', []))
     display_logs(data.get('log_messages', []))
-    pass 
+     
 
 def render_trade_history_tab(data):
     """Render the Trade History tab"""
@@ -118,7 +118,7 @@ def render_trade_history_tab(data):
         st.dataframe(pd.DataFrame(trades), use_container_width=True)
     else:
         st.info("No trade history has been logged yet.")
-    pass
+    
 
 def render_performance_analytics_tab(data):
     """Renders the Performance Analytics tab using the corrected metrics."""
