@@ -104,7 +104,7 @@ def render_trade_history_tab(data):
 
 # --- Performance Metrics ---
 def calculate_metrics(df, initial_balance):
-    """Calculate all performance metrics"""
+    """Calculate all performance metrics with proper handling of edge cases"""
     metrics = {
         'total_trades': len(df),
         'net_profit': 0,
@@ -126,7 +126,7 @@ def calculate_metrics(df, initial_balance):
         else:
             return metrics
     
-    # Basic metrics
+    # Separate winning and losing trades
     wins = df[df['profit'] > 0]
     losses = df[df['profit'] <= 0]
     
@@ -135,8 +135,14 @@ def calculate_metrics(df, initial_balance):
         'win_rate': len(wins) / metrics['total_trades'] * 100,
         'avg_win': wins['profit'].mean() if len(wins) > 0 else 0,
         'avg_loss': abs(losses['profit'].mean()) if len(losses) > 0 else 0,
-        'profit_factor': metrics['avg_win'] / metrics['avg_loss'] if metrics['avg_loss'] > 0 else float('inf')
     })
+    
+    # Proper profit factor calculation
+    if metrics['avg_loss'] > 0:
+        metrics['profit_factor'] = metrics['avg_win'] / metrics['avg_loss']
+    else:
+        # Special case: no losing trades
+        metrics['profit_factor'] = float('inf')  # or you could use a large number like 999
     
     # Advanced metrics
     df['equity'] = initial_balance + df['profit'].cumsum()
@@ -150,6 +156,7 @@ def calculate_metrics(df, initial_balance):
         metrics['sharpe_ratio'] = returns.mean() / returns.std() * np.sqrt(252)
     
     return metrics
+
 
 def render_performance_analytics_tab(data):
     """Render the Performance Analytics tab"""
@@ -172,6 +179,8 @@ def render_performance_analytics_tab(data):
         account_balance = data.get('account_info', {}).get('balance', DEFAULT_BALANCE)
         net_profit = df['profit'].sum() if 'profit' in df.columns else 0
         initial_balance = account_balance - net_profit
+        profit_factor = metrics['profit_factor']
+        pf_display = "∞" if profit_factor == float('inf') else f"{profit_factor:.2f}"
         metrics = calculate_metrics(df, initial_balance)
         
         # Display KPIs
@@ -179,7 +188,7 @@ def render_performance_analytics_tab(data):
         cols = st.columns(4)
         cols[0].metric("Net Profit", f"${metrics['net_profit']:,.2f}", 
                       delta=f"{metrics['net_profit']/initial_balance*100:.1f}%")
-        cols[1].metric("Profit Factor", f"{metrics['profit_factor']:.2f}")
+        cols[1].metric("Profit Factor", pf_display)
         cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}")
         cols[3].metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
         
