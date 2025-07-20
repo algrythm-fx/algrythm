@@ -217,7 +217,7 @@ def render_performance_analytics_tab(data):
         cols[0].metric("Net Profit", f"${metrics['net_profit']:,.2f}", 
                           delta=f"{metrics['net_profit']/initial_balance*100:.1f}%")
         cols[1].metric("Profit Factor", pf_value)
-        cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}"
+        cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}",
                       delta=f"-{max_drawdown/initial_balance*100:.1f}%" if initial_balance else None)
         cols[3].metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
         
