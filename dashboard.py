@@ -158,77 +158,114 @@ def render_performance_analytics_tab(data):
     
     st.subheader("Performance Analytics")
     
-    if trade_history:
+    if not trade_history:
+        st.info("No performance data available. Waiting for the first closed trade to be logged.")
+        return
+    
+    try:
+        # Create DataFrame with proper error handling
+        df = pd.DataFrame(trade_history)
+        
+        # Handle datetime conversion robustly
+        if 'time' in df.columns:
+            try:
+                # First try ISO format parsing
+                df['time'] = pd.to_datetime(df['time'], format='ISO8601', errors='coerce')
+                
+                # If that fails, try mixed formats
+                if df['time'].isna().any():
+                    df['time'] = pd.to_datetime(df['time'], errors='coerce')
+                
+                # Drop rows with invalid timestamps if needed
+                df = df.dropna(subset=['time'])
+                
+                # Sort by time
+                df = df.sort_values('time')
+            except Exception as e:
+                st.warning(f"Could not parse time column: {str(e)}")
+                df['time'] = pd.to_datetime(df.index)
+        else:
+            df['time'] = pd.to_datetime(df.index)
+        
         # Calculate initial balance from current balance and net profit
         current_balance = account_info.get('balance', 10000)
-        df_history = pd.DataFrame(trade_history)
         
-        # Calculate net profit from history if possible
-        if 'profit' in df_history.columns:
-            net_profit_from_history = df_history['profit'].sum()
-        elif 'exit_price' in df_history.columns and 'entry_price' in df_history.columns:
-            net_profit_from_history = (df_history['exit_price'] - df_history['entry_price']).sum()
-        else:
-            net_profit_from_history = 0
-            
-        initial_balance = current_balance - net_profit_from_history
-
-        metrics = calculate_key_metrics(trade_history, initial_balance)
+        # Calculate profit if not already present
+        if 'profit' not in df.columns:
+            if 'exit_price' in df.columns and 'entry_price' in df.columns:
+                df['profit'] = df['exit_price'] - df['entry_price']
+            else:
+                st.error("Cannot calculate metrics: missing profit or price columns")
+                return
+        
+        # Calculate metrics
+        net_profit = df['profit'].sum()
+        initial_balance = current_balance - net_profit
+        
+        # Calculate additional metrics
+        total_trades = len(df)
+        wins = len(df[df['profit'] > 0])
+        losses = total_trades - wins
+        win_rate = wins / total_trades * 100 if total_trades > 0 else 0
+        avg_win = df[df['profit'] > 0]['profit'].mean() if wins > 0 else 0
+        avg_loss = abs(df[df['profit'] <= 0]['profit'].mean()) if losses > 0 else 0
+        profit_factor = avg_win / avg_loss if avg_loss > 0 else float('inf')
+        
+        # Calculate equity curve and drawdown
+        df['equity'] = initial_balance + df['profit'].cumsum()
+        df['peak'] = df['equity'].cummax()
+        df['drawdown'] = df['peak'] - df['equity']
+        max_drawdown = df['drawdown'].max()
+        
+        # Calculate Sharpe Ratio (annualized)
+        returns = df['profit'] / initial_balance
+        sharpe_ratio = returns.mean() / returns.std() * np.sqrt(252) if len(returns) > 1 and returns.std() > 0 else 0
 
         # --- Display Key Performance Indicators (KPIs) ---
         st.subheader("Key Performance Indicators")
         cols = st.columns(4)
-        cols[0].metric("Net Profit", f"${metrics['net_profit']:,.2f}", 
-                      delta=f"{metrics['net_profit']/initial_balance*100:.1f}%" if initial_balance else None)
-        cols[1].metric("Profit Factor", f"{metrics['profit_factor']:.2f}")
-        cols[2].metric("Max Drawdown", f"${metrics['max_drawdown']:,.2f}", 
-                      delta=f"-{metrics['max_drawdown']/initial_balance*100:.1f}%" if initial_balance else None)
-        cols[3].metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
+        cols[0].metric("Net Profit", f"${net_profit:,.2f}", 
+                      delta=f"{net_profit/initial_balance*100:.1f}%" if initial_balance else None)
+        cols[1].metric("Profit Factor", f"{profit_factor:.2f}")
+        cols[2].metric("Max Drawdown", f"${max_drawdown:,.2f}", 
+                      delta=f"-{max_drawdown/initial_balance*100:.1f}%" if initial_balance else None)
+        cols[3].metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
         
         cols2 = st.columns(4)
-        cols2[0].metric("Total Trades", metrics['total_trades'])
-        cols2[1].metric("Win Rate", f"{metrics['win_rate']:.1f}%")
-        cols2[2].metric("Avg Win", f"${metrics['avg_win']:,.2f}")
-        cols2[3].metric("Avg Loss", f"${metrics['avg_loss']:,.2f}")
+        cols2[0].metric("Total Trades", total_trades)
+        cols2[1].metric("Win Rate", f"{win_rate:.1f}%")
+        cols2[2].metric("Avg Win", f"${avg_win:,.2f}")
+        cols2[3].metric("Avg Loss", f"${avg_loss:,.2f}")
 
         # --- Display Charts ---
-        df = pd.DataFrame(trade_history)
-        if 'time' in df.columns:
-            df['time'] = pd.to_datetime(df['time'])
-            df = df.sort_values('time')
-        else:
-            df['time'] = pd.to_datetime(df.index)
-        
         st.subheader("Equity Curve")
-        df['equity'] = initial_balance + df['profit'].cumsum() if 'profit' in df.columns else initial_balance
         st.line_chart(df.rename(columns={'time':'index'}).set_index('index')['equity'])
 
         st.subheader("Trade Distribution")
         chart_col1, chart_col2 = st.columns(2)
         with chart_col1:
-            if 'profit' in df.columns:
-                st.bar_chart(df.set_index('time')['profit'], 
-                            color="#FF4B4B" if metrics['net_profit'] < 0 else "#2ca02c")
-                st.caption("Profit/Loss per Trade")
-            else:
-                st.warning("Profit data not available for chart")
+            st.bar_chart(df.set_index('time')['profit'], 
+                        color="#FF4B4B" if net_profit < 0 else "#2ca02c")
+            st.caption("Profit/Loss per Trade")
         
         with chart_col2:
-            if 'profit' in df.columns:
-                fig = go.Figure(go.Pie(
-                    labels=['Wins', 'Losses'],
-                    values=[len(df[df['profit']>0]), len(df[df['profit']<=0])],
-                    marker_colors=['#2ca02c', '#d62728'],
-                    hole=.3
-                ))
-                fig.update_layout(title_text='Win/Loss Distribution', 
-                                margin=dict(l=20, r=20, t=40, b=20), 
-                                height=300)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("Profit data not available for pie chart")
-    else:
-        st.info("No performance data available. Waiting for the first closed trade to be logged.")
+            fig = go.Figure(go.Pie(
+                labels=['Wins', 'Losses'],
+                values=[wins, losses],
+                marker_colors=['#2ca02c', '#d62728'],
+                hole=.3
+            ))
+            fig.update_layout(title_text='Win/Loss Distribution', 
+                            margin=dict(l=20, r=20, t=40, b=20), 
+                            height=300)
+            st.plotly_chart(fig, use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"An error occurred while rendering performance analytics: {str(e)}")
+        st.error("Please check your trade history data format")
+        if st.checkbox("Show raw trade history data for debugging"):
+            st.write(trade_history)
+            
 # --- Main App Execution ---
 
 # Initialize Firebase connection
