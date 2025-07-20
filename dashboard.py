@@ -187,6 +187,10 @@ def render_performance_analytics_tab(data):
             with st.spinner('Processing time data...'):
                 df['time'] = pd.to_datetime(df['time'], errors='coerce')
                 df = df.dropna(subset=['time']).sort_values('time')
+
+        # Calculate metrics
+        net_profit = df['profit'].sum()
+        initial_balance = current_balance - net_profit
         
         # Calculate metrics only if we have valid data
         if len(df) > 0:
