@@ -189,6 +189,7 @@ def render_performance_analytics_tab(data):
                 df = df.dropna(subset=['time']).sort_values('time')
 
         # Calculate metrics
+        current_balance = account_info.get('balance', 10000)
         net_profit = df['profit'].sum()
         initial_balance = current_balance - net_profit
         
